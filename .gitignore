@@ -1,0 +1,8 @@
+target/
+.mvn/wrapper/apache-maven-*/
+*.class
+*.log
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
