@@ -1,6 +1,6 @@
 # LumenLink
 
-LumenLink is a Java 21 desktop foundation for direct peer-to-peer remote assistance on Windows and Ubuntu.
+LumenLink is a Java 21 desktop foundation for direct peer-to-peer remote assistance. The current implementation target is Windows-to-Windows remote control; Ubuntu client support is deferred until the Windows path is stable.
 
 ## Network model
 
@@ -38,6 +38,8 @@ $env:LUMENLINK_SIGNAL_URL = "wss://signal.example.com/ws"
 $env:LUMENLINK_STUN_URL = "stun:signal.example.com:3478"
 ```
 
+The signaling server can require a room password. Windows clients keep the server IP/STUN defaults visible in the UI, ask for the room password on first run, save it in the local user profile, and try to go online automatically on later launches.
+
 ## Ubuntu server responsibilities
 
 1. Run a TLS-terminated WSS signaling service on `443`.
@@ -47,4 +49,6 @@ $env:LUMENLINK_STUN_URL = "stun:signal.example.com:3478"
 
 ## Current scope
 
-This first Java revision establishes the Java 21 build, UI, signaling protocol, direct-only ICE policy, local control-permission boundary, and test coverage. The next implementation slice wires offer/answer/candidate handling into `WebRtcEngine`, desktop source selection, JavaFX video rendering, and platform-specific input injection.
+Clients no longer start as a fixed host or controller. Each client goes online with a persistent device identity, appears in a shared network-code device list, and either side can request control of another online Windows device. For the current personal-use Windows build, incoming control requests are accepted automatically. WebRTC offer/answer/ICE then runs over the direct-only path.
+
+Windows clients use a single-primary-display remote-control model for the current milestone. The host captures the primary physical display, scales the outgoing video track to the controller-selected resolution when requested, and maps controller pointer input back into the primary display bounds. Resolution, FPS, and max bitrate are selectable before a session starts. The remote window displays runtime WebRTC stats for actual resolution, FPS, video/audio bitrate, RTT, packet loss, and candidate path where available. The Windows audio path is wired as an experimental host-system-audio WebRTC track with controller-side playback and temporary host speaker mute during the session. Ubuntu screen capture, audio, and input injection are not in the active test scope yet.

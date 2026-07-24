@@ -1,6 +1,6 @@
 param(
-    [Parameter(Mandatory = $true)][string]$SignalUrl,
-    [Parameter(Mandatory = $true)][string]$StunUrl
+    [string]$SignalUrl = "ws://8.148.70.189:8080/ws",
+    [string]$StunUrl = "stun:8.148.70.189:3478"
 )
 
 $env:LUMENLINK_SIGNAL_URL = $SignalUrl

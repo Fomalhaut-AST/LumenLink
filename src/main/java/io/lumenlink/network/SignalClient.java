@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 public final class SignalClient implements AutoCloseable, WebSocket.Listener {
     private final ObjectMapper json = new ObjectMapper();
     private final Consumer<SignalMessage> messageHandler;
+    private final StringBuilder fragments = new StringBuilder();
     private volatile WebSocket socket;
 
     public SignalClient(Consumer<SignalMessage> messageHandler) {
@@ -35,18 +36,24 @@ public final class SignalClient implements AutoCloseable, WebSocket.Listener {
 
     @Override
     public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-        if (!last) return CompletableFuture.failedFuture(new IllegalArgumentException("Fragmented signaling is not supported"));
+        fragments.append(data);
+        if (!last) {
+            webSocket.request(1);
+            return CompletableFuture.completedFuture(null);
+        }
         try {
-            messageHandler.accept(json.readValue(data.toString(), SignalMessage.class));
+            messageHandler.accept(json.readValue(fragments.toString(), SignalMessage.class));
         } catch (JsonProcessingException error) {
             return CompletableFuture.failedFuture(error);
+        } finally {
+            fragments.setLength(0);
         }
         webSocket.request(1);
         return CompletableFuture.completedFuture(null);
     }
 
     @Override
-    public void onOpen(WebSocket webSocket) { socket = webSocket; webSocket.request(1); }
+    public void onOpen(WebSocket webSocket) { socket = webSocket; fragments.setLength(0); webSocket.request(1); }
 
     @Override
     public void close() {

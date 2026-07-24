@@ -12,6 +12,10 @@ import io.lumenlink.network.DirectPeerPolicy;
 public final class WebRtcEngine implements AutoCloseable {
     private final PeerConnectionFactory factory = new PeerConnectionFactory();
 
+    public PeerConnectionFactory factory() {
+        return factory;
+    }
+
     public RTCPeerConnection createDirectPeer(DirectPeerPolicy.IcePlan plan, PeerConnectionObserver observer) {
         RTCIceServer stun = new RTCIceServer();
         stun.urls.add(plan.stunUrl());

@@ -1,14 +1,22 @@
 [Unit]
 Description=LumenLink WebRTC signaling service
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=lumenlink
-WorkingDirectory=/opt/lumenlink/server_ubuntu
-ExecStart=/usr/bin/java -jar /opt/lumenlink/server_ubuntu/target/lumenlink-signal-0.1.0-SNAPSHOT.jar
-Restart=on-failure
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/lumenlink
+# Signaling only — cap heap for small VPS (e.g. 2 GiB shared hosts).
+ExecStart=/usr/bin/java -Xms32m -Xmx128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -jar /home/admin/lumenlink/target/lumenlink-signal-0.1.0-SNAPSHOT.jar
+Restart=always
+RestartSec=3
 Environment=LUMENLINK_SIGNAL_PORT=8080
+Environment=LUMENLINK_ROOM_PASSWORD_SHA256=replace-with-install-service-generated-sha256
+# Survive logout / console close
+KillMode=process
+SuccessExitStatus=143
 
 [Install]
 WantedBy=multi-user.target

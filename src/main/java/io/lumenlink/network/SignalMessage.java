@@ -4,7 +4,19 @@ import java.util.Map;
 import java.util.Objects;
 
 public record SignalMessage(Type type, String roomCode, Map<String, Object> payload) {
-    public enum Type { JOIN, PEER_READY, OFFER, ANSWER, ICE_CANDIDATE, PEER_LEFT, ERROR }
+    public enum Type {
+        REGISTER,
+        DEVICE_LIST,
+        DEVICE_OFFLINE,
+        SESSION_REQUEST,
+        SESSION_ACCEPT,
+        SESSION_REJECT,
+        SESSION_END,
+        OFFER,
+        ANSWER,
+        ICE_CANDIDATE,
+        ERROR
+    }
 
     public SignalMessage {
         Objects.requireNonNull(type, "type");
