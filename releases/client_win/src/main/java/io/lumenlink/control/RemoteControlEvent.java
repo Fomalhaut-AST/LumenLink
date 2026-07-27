@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /** Normalized input event sent only through the WebRTC control DataChannel. */
 public record RemoteControlEvent(Type type, Action action, double x, double y, double delta, String keyOrButton) {
-    public enum Type { MOUSE_MOVE, MOUSE_BUTTON, MOUSE_SCROLL, KEY }
+    public enum Type { MOUSE_MOVE, MOUSE_BUTTON, MOUSE_SCROLL, KEY, SECURE_ATTENTION }
     public enum Action { PRESS, RELEASE, MOVE, SCROLL }
 
     public RemoteControlEvent {
@@ -35,6 +35,10 @@ public record RemoteControlEvent(Type type, Action action, double x, double y, d
             throw new IllegalArgumentException("key action must be PRESS or RELEASE");
         }
         return new RemoteControlEvent(Type.KEY, action, 0, 0, 0, key == null ? "" : key);
+    }
+
+    public static RemoteControlEvent secureAttention() {
+        return new RemoteControlEvent(Type.SECURE_ATTENTION, Action.PRESS, 0, 0, 0, "");
     }
 
     public Map<String, Object> toMap() {

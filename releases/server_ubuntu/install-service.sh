@@ -12,6 +12,8 @@ fi
 
 SERVICE_HOME="$(getent passwd "${SERVICE_USER}" | cut -d: -f6)"
 APP_DIR="${ROOT}"
+DATA_DIR="/var/lib/lumenlink"
+LOG_DIR="/var/log/lumenlink"
 JAR="${APP_DIR}/target/lumenlink-signal-0.1.0-SNAPSHOT.jar"
 UNIT_PATH="/etc/systemd/system/lumenlink-signal.service"
 JAVA_BIN="$(command -v java || true)"
@@ -21,15 +23,6 @@ if [ -z "${JAVA_BIN}" ]; then
   exit 1
 fi
 
-read -r -s -p "Room password for Windows clients: " ROOM_PASSWORD
-echo
-if [ -z "${ROOM_PASSWORD}" ]; then
-  echo "Room password must not be empty."
-  exit 1
-fi
-ROOM_PASSWORD_SHA256="$(printf '%s' "${ROOM_PASSWORD}" | sha256sum | awk '{print $1}')"
-unset ROOM_PASSWORD
-
 echo "Building jar..."
 cd "${APP_DIR}"
 ./mvnw -q package
@@ -38,6 +31,9 @@ if [ ! -f "${JAR}" ]; then
   echo "Missing jar: ${JAR}"
   exit 1
 fi
+
+install -d -m 750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${DATA_DIR}"
+install -d -m 750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${LOG_DIR}"
 
 # Stop any foreground instance on 8080 so systemd can bind the port.
 pkill -f 'lumenlink-signal-0.1.0-SNAPSHOT.jar' 2>/dev/null || true
@@ -60,7 +56,8 @@ ExecStart=${JAVA_BIN} -Xms32m -Xmx128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m
 Restart=always
 RestartSec=3
 Environment=LUMENLINK_SIGNAL_PORT=8080
-Environment=LUMENLINK_ROOM_PASSWORD_SHA256=${ROOM_PASSWORD_SHA256}
+Environment=LUMENLINK_DATABASE_PATH=${DATA_DIR}/lumenlink.db
+Environment=LUMENLINK_LOG_DIR=${LOG_DIR}
 KillMode=process
 SuccessExitStatus=143
 

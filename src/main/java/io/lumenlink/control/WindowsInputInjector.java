@@ -9,14 +9,21 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.Locale;
 import java.util.Map;
+import io.lumenlink.windows.SecureDesktopBridge;
 
 /** Applies remote control events on the local Windows desktop. */
 public final class WindowsInputInjector {
     private final ControlPermissionGate gate;
     private final Robot robot;
+    private final SecureDesktopBridge secureDesktop;
 
     public WindowsInputInjector(ControlPermissionGate gate) {
+        this(gate, null);
+    }
+
+    public WindowsInputInjector(ControlPermissionGate gate, SecureDesktopBridge secureDesktop) {
         this.gate = gate;
+        this.secureDesktop = secureDesktop;
         try {
             this.robot = new Robot();
             this.robot.setAutoDelay(0);
@@ -28,6 +35,8 @@ public final class WindowsInputInjector {
 
     public void inject(RemoteControlEvent event) {
         if (!gate.allows(event)) return;
+        if (secureDesktop != null && secureDesktop.sendInput(event)) return;
+        if (event.type() == RemoteControlEvent.Type.SECURE_ATTENTION) return;
         Rectangle bounds = primaryBounds();
         int x = bounds.x + (int) Math.round(event.x() * Math.max(1, bounds.width - 1));
         int y = bounds.y + (int) Math.round(event.y() * Math.max(1, bounds.height - 1));
@@ -50,6 +59,7 @@ public final class WindowsInputInjector {
                 if (event.action() == RemoteControlEvent.Action.PRESS) robot.keyPress(keyCode);
                 else if (event.action() == RemoteControlEvent.Action.RELEASE) robot.keyRelease(keyCode);
             }
+            case SECURE_ATTENTION -> { }
         }
     }
 
@@ -97,7 +107,34 @@ public final class WindowsInputInjector {
                 Map.entry("CTRL", KeyEvent.VK_CONTROL),
                 Map.entry("ALT", KeyEvent.VK_ALT),
                 Map.entry("WINDOWS", KeyEvent.VK_WINDOWS),
-                Map.entry("META", KeyEvent.VK_META)
+                Map.entry("META", KeyEvent.VK_META),
+                Map.entry("CAPS_LOCK", KeyEvent.VK_CAPS_LOCK),
+                Map.entry("MINUS", KeyEvent.VK_MINUS),
+                Map.entry("EQUALS", KeyEvent.VK_EQUALS),
+                Map.entry("OPEN_BRACKET", KeyEvent.VK_OPEN_BRACKET),
+                Map.entry("CLOSE_BRACKET", KeyEvent.VK_CLOSE_BRACKET),
+                Map.entry("BACK_SLASH", KeyEvent.VK_BACK_SLASH),
+                Map.entry("SEMICOLON", KeyEvent.VK_SEMICOLON),
+                Map.entry("QUOTE", KeyEvent.VK_QUOTE),
+                Map.entry("COMMA", KeyEvent.VK_COMMA),
+                Map.entry("PERIOD", KeyEvent.VK_PERIOD),
+                Map.entry("SLASH", KeyEvent.VK_SLASH),
+                Map.entry("BACK_QUOTE", KeyEvent.VK_BACK_QUOTE),
+                Map.entry("NUMPAD0", KeyEvent.VK_NUMPAD0),
+                Map.entry("NUMPAD1", KeyEvent.VK_NUMPAD1),
+                Map.entry("NUMPAD2", KeyEvent.VK_NUMPAD2),
+                Map.entry("NUMPAD3", KeyEvent.VK_NUMPAD3),
+                Map.entry("NUMPAD4", KeyEvent.VK_NUMPAD4),
+                Map.entry("NUMPAD5", KeyEvent.VK_NUMPAD5),
+                Map.entry("NUMPAD6", KeyEvent.VK_NUMPAD6),
+                Map.entry("NUMPAD7", KeyEvent.VK_NUMPAD7),
+                Map.entry("NUMPAD8", KeyEvent.VK_NUMPAD8),
+                Map.entry("NUMPAD9", KeyEvent.VK_NUMPAD9),
+                Map.entry("MULTIPLY", KeyEvent.VK_MULTIPLY),
+                Map.entry("ADD", KeyEvent.VK_ADD),
+                Map.entry("SUBTRACT", KeyEvent.VK_SUBTRACT),
+                Map.entry("DECIMAL", KeyEvent.VK_DECIMAL),
+                Map.entry("DIVIDE", KeyEvent.VK_DIVIDE)
         );
         Integer mapped = map.get(normalized);
         if (mapped != null) return mapped;

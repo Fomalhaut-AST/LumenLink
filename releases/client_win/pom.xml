@@ -13,11 +13,13 @@
         <webrtc.version>0.14.0</webrtc.version>
         <jackson.version>2.18.3</jackson.version>
         <junit.version>5.11.4</junit.version>
+        <jna.version>5.19.0</jna.version>
     </properties>
     <dependencies>
         <dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>${javafx.version}</version></dependency>
         <dependency><groupId>dev.onvoid.webrtc</groupId><artifactId>webrtc-java</artifactId><version>${webrtc.version}</version></dependency>
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>${jackson.version}</version></dependency>
+        <dependency><groupId>net.java.dev.jna</groupId><artifactId>jna-platform</artifactId><version>${jna.version}</version></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.version}</version><scope>test</scope></dependency>
     </dependencies>
     <build>

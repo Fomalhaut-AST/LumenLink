@@ -42,8 +42,29 @@ public record SessionQuality(Resolution resolution, int fps, int maxBitrateKbps)
         public String toString() { return label; }
     }
 
-    public static final int[] FPS_PRESETS = {15, 30, 60, 90, 120};
-    public static final int[] BITRATE_PRESETS_KBPS = {2000, 8000, 20000, 40000, 60000};
+    public enum PerformancePreset {
+        CUSTOM("Custom", null),
+        LOW_POWER("Low power", new SessionQuality(Resolution.P480, 10, 800)),
+        BALANCED("Balanced", new SessionQuality(Resolution.P720, 24, 2500)),
+        QUALITY("Quality", new SessionQuality(Resolution.P1080, 30, 6000)),
+        HIGH_FPS("High frame rate", new SessionQuality(Resolution.P1080, 60, 12000));
+
+        private final String label;
+        private final SessionQuality quality;
+
+        PerformancePreset(String label, SessionQuality quality) {
+            this.label = label;
+            this.quality = quality;
+        }
+
+        public SessionQuality quality() { return quality; }
+
+        @Override
+        public String toString() { return label; }
+    }
+
+    public static final int[] FPS_PRESETS = {5, 10, 15, 24, 30, 60, 90, 120};
+    public static final int[] BITRATE_PRESETS_KBPS = {400, 800, 1200, 2500, 4000, 6000, 8000, 12000, 20000, 40000, 60000};
 
     public SessionQuality {
         Objects.requireNonNull(resolution, "resolution");
@@ -52,7 +73,7 @@ public record SessionQuality(Resolution resolution, int fps, int maxBitrateKbps)
     }
 
     public static SessionQuality defaults() {
-        return new SessionQuality(Resolution.P1080, 30, 8000);
+        return PerformancePreset.BALANCED.quality();
     }
 
     public Map<String, Object> toPayload() {
@@ -65,7 +86,8 @@ public record SessionQuality(Resolution resolution, int fps, int maxBitrateKbps)
 
     public static SessionQuality fromPayload(Map<String, Object> payload) {
         if (payload == null || payload.isEmpty()) return defaults();
-        Resolution resolution = Resolution.P1080;
+        SessionQuality fallback = defaults();
+        Resolution resolution = fallback.resolution();
         Object res = payload.get("resolution");
         if (res != null) {
             try {
@@ -73,8 +95,8 @@ public record SessionQuality(Resolution resolution, int fps, int maxBitrateKbps)
             } catch (IllegalArgumentException ignored) {
             }
         }
-        int fps = intValue(payload.get("fps"), 30);
-        int bitrate = intValue(payload.get("maxBitrateKbps"), 8000);
+        int fps = intValue(payload.get("fps"), fallback.fps());
+        int bitrate = intValue(payload.get("maxBitrateKbps"), fallback.maxBitrateKbps());
         try {
             return new SessionQuality(resolution, fps, bitrate);
         } catch (IllegalArgumentException error) {

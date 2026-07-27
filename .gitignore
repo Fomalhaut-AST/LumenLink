@@ -1,7 +1,12 @@
 target/
+windows-host/bin/
+windows-host/obj/
+releases/client_win/windows-host/bin/
+releases/client_win/windows-host/obj/
 .mvn/wrapper/apache-maven-*/
 *.class
 *.log
+data/
 .idea/
 .vscode/
 .DS_Store

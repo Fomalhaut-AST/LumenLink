@@ -16,30 +16,22 @@ public final class DeviceIdentity {
     private final String displayName;
     private final String platform;
     private final String version;
-    private final String roomPassword;
-
-    public DeviceIdentity(String deviceId, String displayName, String platform, String version, String roomPassword) {
+    public DeviceIdentity(String deviceId, String displayName, String platform, String version) {
         this.deviceId = deviceId;
         this.displayName = displayName;
         this.platform = platform;
         this.version = version;
-        this.roomPassword = roomPassword == null ? "" : roomPassword;
     }
 
     public String deviceId() { return deviceId; }
     public String displayName() { return displayName; }
     public String platform() { return platform; }
     public String version() { return version; }
-    public String roomPassword() { return roomPassword; }
 
     public DeviceIdentity withDisplayName(String name) {
         String trimmed = name == null ? "" : name.trim();
         if (trimmed.isBlank()) trimmed = defaultDisplayName();
-        return new DeviceIdentity(deviceId, trimmed, platform, version, roomPassword);
-    }
-
-    public DeviceIdentity withRoomPassword(String password) {
-        return new DeviceIdentity(deviceId, displayName, platform, version, password);
+        return new DeviceIdentity(deviceId, trimmed, platform, version);
     }
 
     public Map<String, Object> toPayload() {
@@ -65,15 +57,15 @@ public final class DeviceIdentity {
                 Map<String, Object> data = JSON.readValue(Files.readString(file), Map.class);
                 String id = stringValue(data.get("deviceId"));
                 String name = stringValue(data.get("displayName"));
-                String roomPassword = stringValue(data.get("roomPassword"));
                 if (id != null && !id.isBlank()) {
-                    return new DeviceIdentity(
+                    DeviceIdentity loaded = new DeviceIdentity(
                             id,
                             name == null || name.isBlank() ? defaultDisplayName() : name,
                             currentPlatform(),
-                            currentVersion(),
-                            roomPassword
+                            currentVersion()
                     );
+                    loaded.save();
+                    return loaded;
                 }
             }
         } catch (IOException ignored) {
@@ -82,8 +74,7 @@ public final class DeviceIdentity {
                 UUID.randomUUID().toString(),
                 defaultDisplayName(),
                 currentPlatform(),
-                currentVersion(),
-                ""
+                currentVersion()
         );
         created.save();
         return created;
@@ -95,8 +86,7 @@ public final class DeviceIdentity {
             Files.createDirectories(file.getParent());
             Map<String, Object> data = Map.of(
                     "deviceId", deviceId,
-                    "displayName", displayName,
-                    "roomPassword", roomPassword
+                    "displayName", displayName
             );
             Files.writeString(file, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(data));
         } catch (IOException ignored) {

@@ -23,6 +23,8 @@ import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.SetSessionDescriptionObserver;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
 import dev.onvoid.webrtc.media.audio.AudioTrack;
+import dev.onvoid.webrtc.media.audio.CustomAudioSource;
+import dev.onvoid.webrtc.media.video.CustomVideoSource;
 import dev.onvoid.webrtc.media.video.VideoTrack;
 import io.lumenlink.control.RemoteControlEvent;
 import io.lumenlink.media.DesktopCaptureService;
@@ -34,6 +36,7 @@ import io.lumenlink.network.SignalMessage;
 import io.lumenlink.session.ControlSession;
 import io.lumenlink.session.SessionQuality;
 import io.lumenlink.session.SessionStats;
+import io.lumenlink.windows.SecureDesktopBridge;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -57,6 +60,7 @@ public final class DirectPeerSession implements AutoCloseable {
     private final Consumer<SessionStats> statsListener;
     private final Consumer<VideoTrack> remoteVideoListener;
     private final Consumer<RemoteControlEvent> controlListener;
+    private final SecureDesktopBridge secureDesktop;
     private final List<RTCIceCandidate> pendingCandidates = new ArrayList<>();
     private final SessionStatsSampler statsSampler = new SessionStatsSampler();
     private final ScheduledExecutorService statsExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -70,10 +74,16 @@ public final class DirectPeerSession implements AutoCloseable {
     private SystemAudioCaptureService audioCapture;
     private RemoteAudioPlaybackService audioPlayback;
     private WindowsSpeakerMute speakerMute;
+    private CustomVideoSource receiveVideoSource;
+    private VideoTrack receiveVideoTrack;
+    private CustomAudioSource receiveAudioSource;
+    private AudioTrack receiveAudioTrack;
     private RTCDataChannel controlChannel;
     private boolean remoteDescriptionSet;
     private boolean statsStarted;
     private boolean closed;
+    private boolean remoteAudioMuted;
+    private double remoteAudioVolume = 1.0;
 
     public DirectPeerSession(
             DirectPeerPolicy.IcePlan icePlan,
@@ -83,7 +93,8 @@ public final class DirectPeerSession implements AutoCloseable {
             Consumer<String> statusListener,
             Consumer<SessionStats> statsListener,
             Consumer<VideoTrack> remoteVideoListener,
-            Consumer<RemoteControlEvent> controlListener) {
+            Consumer<RemoteControlEvent> controlListener,
+            SecureDesktopBridge secureDesktop) {
         this.icePlan = Objects.requireNonNull(icePlan, "icePlan");
         this.role = Objects.requireNonNull(role, "role");
         this.quality = quality == null ? SessionQuality.defaults() : quality;
@@ -92,6 +103,7 @@ public final class DirectPeerSession implements AutoCloseable {
         this.statsListener = statsListener == null ? stats -> { } : statsListener;
         this.remoteVideoListener = remoteVideoListener == null ? track -> { } : remoteVideoListener;
         this.controlListener = controlListener == null ? event -> { } : controlListener;
+        this.secureDesktop = Objects.requireNonNull(secureDesktop, "secureDesktop");
     }
 
     public synchronized void createOffer() {
@@ -129,6 +141,16 @@ public final class DirectPeerSession implements AutoCloseable {
         } catch (Exception error) {
             statusListener.accept("Could not send control event: " + error.getMessage());
         }
+    }
+
+    public synchronized void setRemoteAudioMuted(boolean muted) {
+        remoteAudioMuted = muted;
+        if (audioPlayback != null) audioPlayback.setMuted(muted);
+    }
+
+    public synchronized void setRemoteAudioVolume(double volume) {
+        remoteAudioVolume = Math.max(0.0, Math.min(1.0, volume));
+        if (audioPlayback != null) audioPlayback.setVolume(remoteAudioVolume);
     }
 
     private void acceptOffer(Map<String, Object> payload) {
@@ -193,19 +215,31 @@ public final class DirectPeerSession implements AutoCloseable {
 
     private void prepareLocalMedia(RTCPeerConnection connection) {
         if (role == ControlSession.Role.HOST && capture == null) {
-            capture = new DesktopCaptureService();
+            capture = new DesktopCaptureService(secureDesktop);
             VideoTrack track = capture.start(engine.factory(), quality);
             RTCRtpSender sender = connection.addTrack(track, List.of("lumenlink"));
             applySenderBitrate(sender);
+            capture.setTrackSwitcher(nextTrack -> {
+                sender.replaceTrack(nextTrack);
+                statusListener.accept(secureDesktop.isLockScreenActive()
+                        ? "Windows lock-screen capture active."
+                        : "Unlocked desktop capture resumed.");
+            });
             statusListener.accept("Screen capture started (" + quality + ").");
         }
         if (role == ControlSession.Role.HOST && audioCapture == null) {
             try {
-                audioCapture = new SystemAudioCaptureService();
+                audioCapture = new SystemAudioCaptureService(secureDesktop, available -> {
+                    if (available) {
+                        muteLocalSpeaker();
+                        statusListener.accept("Windows system audio streaming active. Host speaker muted.");
+                    } else {
+                        closeSpeakerMute();
+                        statusListener.accept("Windows system audio unavailable. Install or restart the secure-desktop service.");
+                    }
+                });
                 AudioTrack track = audioCapture.start(engine.factory());
                 connection.addTrack(track, List.of("lumenlink"));
-                muteLocalSpeaker();
-                statusListener.accept("System audio capture started. Host speaker muted.");
             } catch (Exception error) {
                 closeAudioCapture();
                 statusListener.accept("Could not start system audio capture: " + error.getMessage());
@@ -218,9 +252,24 @@ public final class DirectPeerSession implements AutoCloseable {
             attachControlChannel(controlChannel);
         }
         if (role == ControlSession.Role.CONTROLLER) {
-            RTCRtpTransceiverInit recvOnly = new RTCRtpTransceiverInit();
-            recvOnly.direction = RTCRtpTransceiverDirection.RECV_ONLY;
-            connection.addTransceiver(null, recvOnly);
+            prepareReceiveOnlyMedia(connection);
+        }
+    }
+
+    private void prepareReceiveOnlyMedia(RTCPeerConnection connection) {
+        if (receiveVideoTrack == null) {
+            receiveVideoSource = new CustomVideoSource();
+            receiveVideoTrack = engine.factory().createVideoTrack("lumenlink-receive-video", receiveVideoSource);
+            RTCRtpTransceiverInit videoRecvOnly = new RTCRtpTransceiverInit();
+            videoRecvOnly.direction = RTCRtpTransceiverDirection.RECV_ONLY;
+            connection.addTransceiver(receiveVideoTrack, videoRecvOnly);
+        }
+        if (receiveAudioTrack == null) {
+            receiveAudioSource = new CustomAudioSource();
+            receiveAudioTrack = engine.factory().createAudioTrack("lumenlink-receive-audio", receiveAudioSource);
+            RTCRtpTransceiverInit audioRecvOnly = new RTCRtpTransceiverInit();
+            audioRecvOnly.direction = RTCRtpTransceiverDirection.RECV_ONLY;
+            connection.addTransceiver(receiveAudioTrack, audioRecvOnly);
         }
     }
 
@@ -366,10 +415,12 @@ public final class DirectPeerSession implements AutoCloseable {
         if (audioPlayback == null) {
             audioPlayback = new RemoteAudioPlaybackService();
         }
+        audioPlayback.setMuted(remoteAudioMuted);
+        audioPlayback.setVolume(remoteAudioVolume);
         audioPlayback.attach(audioTrack);
     }
 
-    private void muteLocalSpeaker() {
+    private synchronized void muteLocalSpeaker() {
         try {
             speakerMute = new WindowsSpeakerMute();
             speakerMute.mute();
@@ -389,7 +440,7 @@ public final class DirectPeerSession implements AutoCloseable {
         }
     }
 
-    private void closeSpeakerMute() {
+    private synchronized void closeSpeakerMute() {
         if (speakerMute != null) {
             try {
                 speakerMute.close();
@@ -445,8 +496,28 @@ public final class DirectPeerSession implements AutoCloseable {
             audioPlayback = null;
         }
         closeSpeakerMute();
+        closeReceiveOnlyMedia();
         statsExecutor.shutdownNow();
         pendingCandidates.clear();
         engine.close();
+    }
+
+    private void closeReceiveOnlyMedia() {
+        if (receiveVideoTrack != null) {
+            try { receiveVideoTrack.dispose(); } catch (Exception ignored) { }
+            receiveVideoTrack = null;
+        }
+        if (receiveVideoSource != null) {
+            try { receiveVideoSource.dispose(); } catch (Exception ignored) { }
+            receiveVideoSource = null;
+        }
+        if (receiveAudioTrack != null) {
+            try { receiveAudioTrack.dispose(); } catch (Exception ignored) { }
+            receiveAudioTrack = null;
+        }
+        if (receiveAudioSource != null) {
+            try { receiveAudioSource.dispose(); } catch (Exception ignored) { }
+            receiveAudioSource = null;
+        }
     }
 }

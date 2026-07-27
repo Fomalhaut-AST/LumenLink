@@ -16,4 +16,12 @@ class SessionQualityTest {
                 "maxBitrateKbps", 20000
         ), quality.toPayload());
     }
+
+    @Test
+    void providesLowPowerAndBalancedDefaults() {
+        assertEquals(new SessionQuality(SessionQuality.Resolution.P480, 10, 800),
+                SessionQuality.PerformancePreset.LOW_POWER.quality());
+        assertEquals(new SessionQuality(SessionQuality.Resolution.P720, 24, 2500), SessionQuality.defaults());
+        assertEquals(SessionQuality.defaults(), SessionQuality.fromPayload(Map.of("unknown", true)));
+    }
 }

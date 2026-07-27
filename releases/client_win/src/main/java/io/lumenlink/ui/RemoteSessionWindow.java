@@ -4,17 +4,21 @@ import dev.onvoid.webrtc.media.video.VideoTrack;
 import io.lumenlink.control.RemoteControlEvent;
 import io.lumenlink.media.VideoFrameView;
 import io.lumenlink.session.SessionStats;
+import io.lumenlink.session.SessionQuality;
 import io.lumenlink.webrtc.DirectPeerSession;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.Slider;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -27,14 +31,18 @@ public final class RemoteSessionWindow {
     private final ImageView remoteView = new ImageView();
     private final StackPane viewer = new StackPane();
     private final Label viewerHint = new Label("Waiting for remote screen...");
-    private final VideoFrameView videoFrameView = new VideoFrameView(remoteView);
+    private final CheckBox audioEnabled = new CheckBox("Audio");
+    private final Slider audioVolume = new Slider(0, 100, 100);
+    private final VideoFrameView videoFrameView;
     private final Runnable onClose;
     private DirectPeerSession peerSession;
     private boolean connected;
     private boolean closing;
 
-    public RemoteSessionWindow(String peerName, Runnable onClose) {
+    public RemoteSessionWindow(String peerName, SessionQuality quality, Runnable onClose) {
         this.onClose = onClose == null ? () -> { } : onClose;
+        SessionQuality renderQuality = quality == null ? SessionQuality.defaults() : quality;
+        videoFrameView = new VideoFrameView(remoteView, renderQuality.fps());
 
         viewerHint.setStyle("-fx-text-fill: #9aa3ad;");
         remoteView.setPreserveRatio(true);
@@ -55,8 +63,26 @@ public final class RemoteSessionWindow {
         stats.setWrapText(true);
         stats.setStyle("-fx-background-color: #101418; -fx-text-fill: #aeb7c2;");
 
+        audioEnabled.setSelected(true);
+        audioEnabled.setDisable(true);
+        audioEnabled.setStyle("-fx-text-fill: #d7dde5;");
+        audioVolume.setPrefWidth(160);
+        audioVolume.setDisable(true);
+        audioEnabled.selectedProperty().addListener((observable, previous, enabled) -> {
+            if (peerSession != null) peerSession.setRemoteAudioMuted(!enabled);
+        });
+        audioVolume.valueProperty().addListener((observable, previous, value) -> {
+            if (peerSession != null) peerSession.setRemoteAudioVolume(value.doubleValue() / 100.0);
+        });
+        Label volumeLabel = new Label("Volume");
+        volumeLabel.setStyle("-fx-text-fill: #d7dde5;");
+        HBox audioControls = new HBox(8, audioEnabled, volumeLabel, audioVolume);
+        audioControls.setAlignment(Pos.CENTER_LEFT);
+        audioControls.setPadding(new Insets(6, 10, 6, 10));
+        audioControls.setStyle("-fx-background-color: #151a20; -fx-text-fill: #d7dde5;");
+
         BorderPane root = new BorderPane(viewer);
-        root.setBottom(new VBox(status, stats));
+        root.setBottom(new VBox(audioControls, status, stats));
         stage.setTitle("Remote — " + peerName);
         stage.setMinWidth(900);
         stage.setMinHeight(600);
@@ -72,6 +98,10 @@ public final class RemoteSessionWindow {
 
     public void bindSession(DirectPeerSession session) {
         this.peerSession = session;
+        audioEnabled.setDisable(false);
+        audioVolume.setDisable(false);
+        session.setRemoteAudioMuted(!audioEnabled.isSelected());
+        session.setRemoteAudioVolume(audioVolume.getValue() / 100.0);
     }
 
     public void attachTrack(VideoTrack track) {
@@ -110,6 +140,8 @@ public final class RemoteSessionWindow {
     private void disposeUi() {
         videoFrameView.close();
         peerSession = null;
+        audioEnabled.setDisable(true);
+        audioVolume.setDisable(true);
         connected = false;
     }
 
@@ -154,6 +186,12 @@ public final class RemoteSessionWindow {
 
     private void onKey(KeyEvent event, RemoteControlEvent.Action action) {
         if (!canControl()) return;
+        if (action == RemoteControlEvent.Action.PRESS && event.getCode() == javafx.scene.input.KeyCode.DELETE
+                && event.isControlDown() && event.isAltDown()) {
+            peerSession.sendControlEvent(RemoteControlEvent.secureAttention());
+            event.consume();
+            return;
+        }
         String key = mapKey(event);
         if (key == null) return;
         peerSession.sendControlEvent(RemoteControlEvent.key(action, key));
@@ -206,6 +244,30 @@ public final class RemoteSessionWindow {
             case CONTROL -> "CONTROL";
             case ALT -> "ALT";
             case WINDOWS -> "WINDOWS";
+            case CAPS -> "CAPS_LOCK";
+            case MINUS -> "MINUS";
+            case EQUALS -> "EQUALS";
+            case OPEN_BRACKET -> "OPEN_BRACKET";
+            case CLOSE_BRACKET -> "CLOSE_BRACKET";
+            case BACK_SLASH -> "BACK_SLASH";
+            case SEMICOLON -> "SEMICOLON";
+            case QUOTE -> "QUOTE";
+            case COMMA -> "COMMA";
+            case PERIOD -> "PERIOD";
+            case SLASH -> "SLASH";
+            case BACK_QUOTE -> "BACK_QUOTE";
+            case DIGIT0 -> "0";
+            case DIGIT1 -> "1";
+            case DIGIT2 -> "2";
+            case DIGIT3 -> "3";
+            case DIGIT4 -> "4";
+            case DIGIT5 -> "5";
+            case DIGIT6 -> "6";
+            case DIGIT7 -> "7";
+            case DIGIT8 -> "8";
+            case DIGIT9 -> "9";
+            case NUMPAD0, NUMPAD1, NUMPAD2, NUMPAD3, NUMPAD4, NUMPAD5, NUMPAD6, NUMPAD7, NUMPAD8, NUMPAD9,
+                    ADD, SUBTRACT, MULTIPLY, DIVIDE, DECIMAL -> event.getCode().name();
             case F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12 -> event.getCode().getName().toUpperCase();
             default -> {
                 String text = event.getText();

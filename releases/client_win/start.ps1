@@ -1,5 +1,5 @@
 param(
-    [string]$SignalUrl = "ws://8.148.70.189:8080/ws",
+    [string]$SignalUrl = "wss://8.148.70.189/ws",
     [string]$StunUrl = "stun:8.148.70.189:3478"
 )
 
